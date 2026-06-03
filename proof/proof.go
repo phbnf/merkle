@@ -52,6 +52,37 @@ func Inclusion(index, size uint64) (Nodes, error) {
 	return nodes(index, 0, size).skipFirst(), nil
 }
 
+// SubtreeInclusion returns the information on how to fetch and construct an inclusion
+// proof for the given leaf index in a log Merkle subtree covering [start, end).
+// It requires:
+//   - 0 <= start <= index < end
+//   - start to be a multiple of the smallest power of two greater than or equal to
+//     (end - start)
+func SubtreeInclusion(index, start, end uint64) (Nodes, error) {
+	if start >= end {
+		return Nodes{}, fmt.Errorf("start %d greater than or equal to end %d", start, end)
+	}
+	if index < start || index >= end {
+		return Nodes{}, fmt.Errorf("index %d out of bounds for subtree [%d, %d)", index, start, end)
+	}
+	if !isSubtreeValid(start, end) {
+		return Nodes{}, fmt.Errorf("start %d not a multiple of bit_ceil(end - start) = %d", start, end-start)
+	}
+
+	// Shift the subtree to the left, such that it starts at 0.
+	p := nodes(index-start, 0, end-start).skipFirst()
+
+	// Shift nodes back to the right, in line with the original subtree position.
+	for n := range p.IDs {
+		p.IDs[n].Index += start >> p.IDs[n].Level
+	}
+	// For consistency, always shift p.ephem, regardless of whether it will be
+	// used by the proof.
+	p.ephem.Index += start >> p.ephem.Level
+
+	return p, nil
+}
+
 // Consistency returns the information on how to fetch and construct a
 // consistency proof between the two given tree sizes of a log Merkle tree. It
 // requires 0 <= size1 <= size2.
@@ -134,6 +165,8 @@ func nodes(index uint64, level uint, size uint64) Nodes {
 		len1, len2 = 0, 0
 	}
 
+	// Edge case: For perfect trees the ephemeral node is the sibling of the root
+	// However, it will not be used in any proof.
 	return Nodes{IDs: nodes, begin: len1, end: len2, ephem: fork.Sibling()}
 }
 
@@ -188,4 +221,29 @@ func reverse(ids []compact.NodeID) {
 	for i, j := 0, len(ids)-1; i < j; i, j = i+1, j-1 {
 		ids[i], ids[j] = ids[j], ids[i]
 	}
+}
+
+// isSubTreeValid returns whether a subtree covers a valid range.
+// A subtree is valid if there exist a parent tree node to:
+// - all the subtree nodes
+// - no extra node to the left of the subtree
+// - potentially extra nodes to the right of the subtree
+func isSubtreeValid(start, end uint64) bool {
+	l := end - start
+	if start == 0 {
+		return true
+	} else if (l) > uint64(1)<<63 {
+		// special-case large subtree to avoid panic
+		return false
+	}
+	return start%bitCeil(l) == 0
+}
+
+// bitCeil returns the smallest power of 2 larger than n.
+// MUST NOT be used with n larger than uint64(1)<<63.
+func bitCeil(n uint64) uint64 {
+	if n <= 1 {
+		return 1
+	}
+	return uint64(1) << bits.Len64(n-1)
 }
