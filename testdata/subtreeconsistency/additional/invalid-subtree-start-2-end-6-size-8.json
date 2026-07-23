@@ -1,10 +1,10 @@
 {
-  "start": 0,
-  "end": 0,
-  "size": 0,
+  "start": 2,
+  "end": 6,
+  "size": 8,
   "root1": "ZG9uJ3QgY2FyZSAx",
   "root2": "ZG9uJ3QgY2FyZSAy",
   "proof": [],
-  "desc": "sizes are equal (zero) but roots are not",
+  "desc": "invalid subtree start 2 end 6 size 8",
   "wantErr": true
 }
